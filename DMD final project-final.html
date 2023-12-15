@@ -1,0 +1,174 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <!--  contains metadata, references to external resources, and other information about the HTML document that isn't directly visible on the webpage.-->
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title> Duchenne Muscular Distrophy Drug Targets</title>
+  <style>
+    body {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      height: 120vh;
+      margin: 0;
+    }
+    #chart {
+      width: 80%;
+      height: 1000px;
+      border: 1px solid #ccc;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      
+    }
+
+    h1 {
+      margin-bottom: 20px; 
+    }
+
+  </style>
+  <!-- Import Chart.js and D3.js libraries -->
+  <script src="https://d3js.org/d3.v4.min.js"></script>
+
+<body>
+  <h1>Duchenne Muscular Distrophy Potential Drugs </h1>
+  <div id="chart">
+    <script>
+      // Define the SPARQL endpoint and query
+      const sparqlEndpoint = "https://chemblmirror.rdf.bigcat-bioinformatics.org/sparql";
+      const sparqlQuery = `
+      PREFIX chembl: <http://rdf.ebi.ac.uk/terms/chembl#>
+      PREFIX target: <http://rdf.ebi.ac.uk/resource/chembl/target/>
+
+      SELECT ?target ?targetLabel ?molLabel ?assayLabel ?type ?value ?p ?unit
+      WHERE {
+        VALUES ?target {
+          target:CHEMBL5742
+          target:CHEMBL1841
+          target:CHEMBL2093862
+        }
+        
+        ?assay chembl:hasTarget ?target.
+        ?activity chembl:hasAssay ?assay.
+        ?activity chembl:hasMolecule ?molecule.
+        
+        ?target rdfs:label ?targetLabel.
+        ?molecule rdfs:label ?molLabel.
+        
+        ?assay rdfs:label ?assayLabel.
+        
+        ?activity chembl:type ?type.
+        ?activity chembl:standardValue ?value.
+        ?activity chembl:standardUnits ?unit.
+        
+        FILTER (?type = "IC50")
+      }
+      ORDER BY ASC(?value)
+      LIMIT 10
+      `;
+
+      // Make the SPARQL query
+      fetch(`${sparqlEndpoint}?query=${encodeURIComponent(sparqlQuery)}`, { //Retrieves Data from endpoint
+        headers: {
+          'Accept': 'application/json'
+        }
+      })
+        //Processing data received
+        .then(response => response.json())
+        .then(data => {
+          //Handling data
+            console.log(data)
+          var actualData = data.results.bindings
+          const dataset= actualData.map(d=>({ //Extract molecule and potency from array for each element
+            molecule: d.molLabel.value, 
+            potency: d.value.value,
+            unit: d.unit.value
+          }))
+
+          console.log(dataset)
+
+          data = {};
+
+          // restructure the asynchronous response by creating a map of molecule names and potency values
+          data.children = dataset.map(function (item) { return { "Name": item.molecule, "Potency": item.potency, "Unit":item.unit } });
+
+          var width = 1200;
+          var height = 800;
+
+          // Create the main SVG element
+          var svg = d3.select('#chart').append('svg')
+            .attr('width', width)
+            .attr('height', height)
+            .attr('transform', 'translate(0,0)');
+
+          var colorScale
+           = d3.scaleOrdinal(d3.schemeCategory20);
+
+        
+          // initializes a pack layout using D3.js's pack() function and applies it to the provided data
+            //Creates circle layout
+          var bubble = d3.pack(data)
+            .size([height, height])
+            .padding(5); //space between circles
+
+          
+            var nodes = d3.hierarchy(data) //function creates a root node for the hierarchical layout 
+            .sum(function (d) { return d.Potency; }); //sets size proportional to Potency
+
+          // Create and positioning the bubbles
+          circles = svg.selectAll("g")
+            .data(bubble(nodes).descendants()) //generates data structure
+            .enter()
+            .filter(function (d) {
+              return !d.children
+            })
+            .append("g")
+            .attr("transform", function (d) {
+              return "translate(" + d.x + "," + d.y + ")";
+            }) //visually renders circles at calculated positions
+
+            //Adjustments, set r to radius
+          circles.append("circle")
+            .attr("r", function (d) {
+              return d.r;
+            })
+            .style("fill", function (d, i) {
+              return colorScale
+              (i); //Assign colorScale
+              
+            })
+
+          // Add the text to the bubbles
+          circles.append("text")
+            .style("text-anchor", "middle")
+            .attr("font-family", "sans-serif")
+            .attr("font-size", function (d) {
+              return d.r / 8;
+            })
+            .text(function (d) {
+              return d.data.Name.substring(0, d.r / 3);
+            });
+
+          // Add the text to the bubbles
+          circles.append("text")
+            .attr("dy", "1.3em") //vertical adj
+            .style("text-anchor", "middle")
+            .text(function (d) {
+              return "IC50: " + d.data.Potency + " " + d.data.Unit; //concatenation of data and String
+            })
+            .attr("font-family", "sans-serif")
+            .attr("font-size", function (d) {
+              return d.r / 8;
+            })
+
+        })
+        .catch(error => console.error('Error:', error));
+
+
+  </script>
+
+
+</html>
